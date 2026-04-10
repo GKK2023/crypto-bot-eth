@@ -1,6 +1,6 @@
 """
 CryptoBot - Spot Trading Bot
-Version Gate.io ETH/USDT: 15min, RSI 35, profit 0.5%, frais 0.10%, max 20$
+Version Gate.io ETH/USDT: 15min, RSI 35, profit 0.5%, take-profit 1.5%, frais 0.10%, max 20$
 """
 
 import os
@@ -28,6 +28,9 @@ MIN_USDT_RESERVE = 1
 
 # Seuil de profit minimum (0.5%)
 MIN_PROFIT_THRESHOLD = 0.5
+
+# Take-Profit automatique (1.5%)
+TAKE_PROFIT_THRESHOLD = 1.5
 
 # Seuil RSI pour achat
 RSI_BUY_THRESHOLD = 35  # Au lieu de 40
@@ -219,6 +222,18 @@ class SimpleBot:
             rsi = self.calculate_rsi(data)
             macd, signal = self.calculate_macd(data)
             
+            current_price = self.get_price()
+            if current_price is None:
+                return False
+            
+            # Vérifier d'abord le Take-Profit automatique
+            is_profitable, profit_pct, details = self.calculate_profitability(current_price)
+            
+            if profit_pct >= TAKE_PROFIT_THRESHOLD:
+                print(f"  -> TAKE-PROFIT! Vente automatique à {profit_pct:.2f}% (+{details.get('profit_usdt', 0):.2f}$)")
+                return True
+            
+            # Sinon, suivre les signaux techniques
             technical_sell = False
             # Vente si RSI > 60
             if rsi > 60:
@@ -229,12 +244,6 @@ class SimpleBot:
             
             if not technical_sell:
                 return False
-            
-            current_price = self.get_price()
-            if current_price is None:
-                return False
-            
-            is_profitable, profit_pct, details = self.calculate_profitability(current_price)
             
             if is_profitable:
                 print(f"  -> Vente RENTABLE: Profit: {profit_pct:.2f}% (+{details.get('profit_usdt', 0):.2f}$)")
@@ -314,6 +323,7 @@ class SimpleBot:
         print(f"Timeframe: {TIMEFRAME} (15 minutes)")
         print(f"Seuil d'achat RSI: < {RSI_BUY_THRESHOLD}")
         print(f"Seuil de profit: {MIN_PROFIT_THRESHOLD}%")
+        print(f"Take-Profit: {TAKE_PROFIT_THRESHOLD}%")
         print(f"Frais: {TRADING_FEE*100}%")
         print(f"Réserve: {MIN_USDT_RESERVE}$")
         print(f"Limite capital: {MAX_USDT_CAP}$")
