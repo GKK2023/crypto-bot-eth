@@ -271,16 +271,16 @@ class SimpleBot:
                 amount_after_fee = amount_before_fee * (1 - TRADING_FEE)
                 
                 if amount_after_fee * price >= 7:
-                    amount = round(amount_after_fee, 4)
+                    amount = round(amount_after_fee, 5)
                     
                     if PAPER_MODE:
                         self.balance['USDT'] -= available_usdt
                         self.balance['ETH'] += amount
                         self.position = {'side': 'long', 'entry': price, 'amount': amount}
-                        print(f"ACHAT simulé: {amount:.4f} ETH à ${price}")
+                        print(f"ACHAT simulé: {amount:.5f} ETH à ${price}")
                     else:
                         order = self.exchange.create_order(SYMBOL, 'market', 'buy', available_usdt)
-                        print(f"ACHAT réel: {amount:.4f} ETH à ${price}")
+                        print(f"ACHAT réel: {amount:.5f} ETH à ${price}")
                         self.position = {'side': 'long', 'entry': price, 'amount': amount}
         except Exception as e:
             print(f"Erreur achat: {e}")
@@ -302,17 +302,18 @@ class SimpleBot:
                     print(f"  -> Vente ANNULÉE: Non rentable")
                     return
                 
-                amount = round(eth_balance, 4)
+                # Utiliser la précision exacte du solde pour Gate.io
+                amount = eth_balance
                 
                 if amount * price >= 7:
                     if PAPER_MODE:
                         self.balance['ETH'] = 0
                         self.balance['USDT'] += amount * price * (1 - TRADING_FEE)
-                        print(f"VENTE simulée: {amount:.4f} ETH à ${price}")
+                        print(f"VENTE simulée: {amount:.5f} ETH à ${price}")
                         self.position = None
                     else:
                         order = self.exchange.create_order(SYMBOL, 'market', 'sell', amount)
-                        print(f"VENTE réelle: {amount:.4f} ETH à ${price}")
+                        print(f"VENTE réelle: {amount:.5f} ETH à ${price}")
                         self.position = None
         except Exception as e:
             print(f"Erreur vente: {e}")
@@ -339,7 +340,7 @@ class SimpleBot:
                     price = self.get_price()
                     if price is not None:
                         print(f"\n{datetime.now().strftime('%H:%M:%S')} | Prix: ${price:,.2f}")
-                        print(f"  Solde USDT: {float(self.balance.get('USDT', 0)):.2f} | ETH: {float(self.balance.get('ETH', 0)):.4f}")
+                        print(f"  Solde USDT: {float(self.balance.get('USDT', 0)):.2f} | ETH: {float(self.balance.get('ETH', 0)):.5f}")
                         
                         if self.position is None:
                             if self.should_buy(data):
