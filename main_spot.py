@@ -1,6 +1,6 @@
 """
 CryptoBot - Spot Trading Bot
-Version Gate.io ETH/USDT: 15min, RSI 35, profit 0.5%, take-profit 1.5%, frais 0.10%, max 20$
+Version Gate.io ETH/USDT: 15min, RSI 35, profit 0.5%, take-profit 1.5%, frais 0.10%, allocation 30%
 """
 
 import os
@@ -33,10 +33,10 @@ MIN_PROFIT_THRESHOLD = 0.5
 TAKE_PROFIT_THRESHOLD = 1.5
 
 # Seuil RSI pour achat
-RSI_BUY_THRESHOLD = 35  # Au lieu de 40
+RSI_BUY_THRESHOLD = 35
 
-# Limite maximale de capital pour ce bot (USDT)
-MAX_USDT_CAP = 20
+# Pourcentage des fonds disponibles pour ce bot (30% pour ETH)
+MAX_USDT_PERCENT = 30
 
 class SimpleBot:
     def __init__(self):
@@ -207,10 +207,8 @@ class SimpleBot:
             rsi = self.calculate_rsi(data)
             macd, signal = self.calculate_macd(data)
             
-            # Achat si RSI < 35 (au lieu de 40)
             if rsi < RSI_BUY_THRESHOLD:
                 return True
-            # Ou si MACD cross au-dessus du signal avec RSI < 50
             if macd > signal and rsi < 50:
                 return True
             return False
@@ -235,10 +233,8 @@ class SimpleBot:
             
             # Sinon, suivre les signaux techniques
             technical_sell = False
-            # Vente si RSI > 60
             if rsi > 60:
                 technical_sell = True
-            # Ou si MACD cross en-dessous du signal avec RSI > 50
             if macd < signal and rsi > 50:
                 technical_sell = True
             
@@ -263,8 +259,9 @@ class SimpleBot:
             if price is None:
                 return
             
-            # Limiter le capital utilisé à MAX_USDT_CAP
-            available_usdt = min(float(self.balance.get('USDT', 0)) - MIN_USDT_RESERVE, MAX_USDT_CAP)
+            # Calculer 30% des fonds disponibles
+            total_funds = float(self.balance.get('USDT', 0)) - MIN_USDT_RESERVE
+            available_usdt = total_funds * (MAX_USDT_PERCENT / 100)
             
             if available_usdt > 5:
                 amount_before_fee = available_usdt / price
@@ -280,7 +277,7 @@ class SimpleBot:
                         print(f"ACHAT simulé: {amount:.5f} ETH à ${price}")
                     else:
                         order = self.exchange.create_order(SYMBOL, 'market', 'buy', available_usdt)
-                        print(f"ACHAT réel: {amount:.5f} ETH à ${price}")
+                        print(f"ACHAT réel: {amount:.5f} ETH à ${price} ({MAX_USDT_PERCENT}% des fonds)")
                         self.position = {'side': 'long', 'entry': price, 'amount': amount}
         except Exception as e:
             print(f"Erreur achat: {e}")
@@ -302,7 +299,6 @@ class SimpleBot:
                     print(f"  -> Vente ANNULÉE: Non rentable")
                     return
                 
-                # Utiliser la précision exacte du solde pour Gate.io
                 amount = eth_balance
                 
                 if amount * price >= 7:
@@ -327,7 +323,7 @@ class SimpleBot:
         print(f"Take-Profit: {TAKE_PROFIT_THRESHOLD}%")
         print(f"Frais: {TRADING_FEE*100}%")
         print(f"Réserve: {MIN_USDT_RESERVE}$")
-        print(f"Limite capital: {MAX_USDT_CAP}$")
+        print(f"Allocation: {MAX_USDT_PERCENT}% des fonds disponibles")
         print(f"====================================\n")
         
         while True:
@@ -355,7 +351,6 @@ class SimpleBot:
                         macd, signal = self.calculate_macd(data)
                         print(f"  RSI: {rsi:.1f} | MACD: {macd:.2f} (signal: {signal:.2f})")
                 
-                # 15 minutes = 900 secondes
                 time.sleep(900)
                 
             except KeyboardInterrupt:
