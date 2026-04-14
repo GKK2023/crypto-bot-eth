@@ -1,6 +1,6 @@
 """
 CryptoBot - Spot Trading Bot
-Version Gate.io ETH/USDT: 15min, RSI 35, allocation 30%, profit 0.5% NET, take-profit 1.5%
+Version Gate.io ETH/USDT: 15min, RSI 35, allocation 20%, profit 0.5% NET, take-profit 1.5%
 """
 
 import os
@@ -27,8 +27,8 @@ TOTAL_FEES = 0.002  # Frais combinés achat + vente
 # Solde minimum à garder en USDT
 MIN_USDT_RESERVE = 5
 
-# Pourcentage du solde à utiliser (30% pour bot ETH)
-MAX_USDT_PERCENT = 30
+# Pourcentage du solde à utiliser (20% pour bot ETH)
+MAX_USDT_PERCENT = 20
 
 # Seuil de profit minimum NET (0.5% après tous les frais)
 MIN_PROFIT_THRESHOLD = 0.5
@@ -264,8 +264,6 @@ class SimpleBot:
             # Calculer la rentabilité
             is_profitable, profit_pct, details = self.calculate_profitability(current_price)
             
-            # LOGIQUE CORRIGÉE:
-            
             # 1. TAKE-PROFIT: Vente automatique si profit >= 1.5%
             if profit_pct >= TAKE_PROFIT_THRESHOLD and profit_pct > 0:
                 print(f"  -> TAKE-PROFIT! Vente automatique à {profit_pct:.2f}% (+{details.get('profit_usdt', 0):.2f}$)")
@@ -305,7 +303,7 @@ class SimpleBot:
             
             total_usdt = float(self.balance.get('USDT', 0))
             
-            # Allocation en pourcentage (30%)
+            # Allocation en pourcentage (20%)
             usdt_to_use = (total_usdt - MIN_USDT_RESERVE) * (MAX_USDT_PERCENT / 100)
             
             if usdt_to_use > 5:
