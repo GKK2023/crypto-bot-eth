@@ -1,7 +1,7 @@
 """
 CryptoBot - Spot Trading Bot
 Version Gate.io ETH/USDT: 15min, RSI 35, allocation 20%, profit 0.5% NET, take-profit 1.5%
-Avec gestion automatique du dust
+Avec gestion automatique du dust - CORRIGÉ
 """
 
 import os
@@ -43,7 +43,7 @@ RSI_BUY_THRESHOLD = 35
 # RSI pour vente technique
 RSI_SELL_THRESHOLD = 70
 
-# Seuil minimum pour éviter le dust (0.001 ETH)
+# Seuil minimum pour une vraie position (0.001 ETH)
 MIN_POSITION_THRESHOLD = 0.001
 
 class SimpleBot:
@@ -78,31 +78,14 @@ class SimpleBot:
             self.balance = self.get_real_balance()
             
             eth_balance = float(self.balance.get('ETH', 0))
+            
+            # Si dust, on l'ignore et on repart à zéro
             if eth_balance >= MIN_POSITION_THRESHOLD:
                 self.position = {'side': 'long', 'entry': 0, 'amount': eth_balance}
                 print(f"Position existante détectée: {eth_balance} ETH")
             else:
-                # Si dust, on vend et on repart à zéro
-                if eth_balance > 0:
-                    print(f"Dust détecté: {eth_balance} ETH - vente automatique")
-                    self.sell_dust(eth_balance)
+                print(f"Dust ignoré: {eth_balance} ETH - Pas de position")
                 self.position = None
-    
-    def sell_dust(self, amount):
-        """Vendre automatiquement le dust"""
-        try:
-            price = self.get_price()
-            if price is None or amount <= 0:
-                return
-            
-            if amount * price >= 1:  # Au moins 1$ de valeur
-                order = self.exchange.create_order(SYMBOL, 'market', 'sell', amount)
-                print(f"  -> DUST VENDU: {amount:.6f} ETH à ${price}")
-                self.position = None
-            else:
-                print(f"  -> DUST TROP PETIT pour vendre: {amount:.6f} ETH (valeur: ${amount*price:.2f})")
-        except Exception as e:
-            print(f"Erreur vente dust: {e}")
     
     def get_real_balance(self):
         try:
@@ -207,9 +190,6 @@ class SimpleBot:
     def calculate_profitability(self, current_price):
         """
         Calcule si la position est profitable NET (après tous les frais).
-        
-        Break-even price = entry_price * (1 + TOTAL_FEES)
-        Prix pour profit de 0.5% = entry_price * (1 + TOTAL_FEES) * (1 + MIN_PROFIT_THRESHOLD/100)
         """
         try:
             if not self.position:
@@ -275,13 +255,6 @@ class SimpleBot:
             current_price = self.get_price()
             if current_price is None:
                 return False
-            
-            # Vérifier le solde réel ETH
-            eth_balance = float(self.balance.get('ETH', 0))
-            
-            # Mettre à jour le position amount avec le solde réel
-            if self.position:
-                self.position['amount'] = eth_balance
             
             # Calculer la rentabilité
             is_profitable, profit_pct, details = self.calculate_profitability(current_price)
@@ -389,7 +362,7 @@ class SimpleBot:
         print(f"Seuil de profit NET: {MIN_PROFIT_THRESHOLD}% (après {TOTAL_FEES*100}% frais)")
         print(f"Take-Profit: {TAKE_PROFIT_THRESHOLD}%")
         print(f"Réserve: {MIN_USDT_RESERVE}$")
-        print(f"Seuil position minimum: {MIN_POSITION_THRESHOLD} ETH")
+        print(f"Seuil position minimum: {MIN_POSITION_THRESHOLD} ETH (dust ignoré si <)")
         print(f"========================================\n")
         
         while True:
@@ -404,27 +377,23 @@ class SimpleBot:
                         print(f"\n{datetime.now().strftime('%H:%M:%S')} | Prix: ${price:,.2f}")
                         print(f"  Solde USDT: {float(self.balance.get('USDT', 0)):.2f} | ETH: {float(self.balance.get('ETH', 0)):.6f}")
                         
-                        # Vérifier le dust avant toute chose
                         eth_balance = float(self.balance.get('ETH', 0))
                         
                         if self.position is None:
-                            # Pas de position - vérifier si dust à vendre ou si achat
-                            if eth_balance > 0 and eth_balance < MIN_POSITION_THRESHOLD:
-                                print(f"  -> Dust détecté: {eth_balance:.6f} ETH - vente automatique")
-                                self.sell_dust(eth_balance)
-                            elif eth_balance == 0:
-                                # Pas de position et pas de dust - vérifier achat
-                                if self.should_buy(data):
-                                    print("  -> Signal ACHAT détecté!")
-                                    self.buy()
+                            # Pas de position - vérifier si signal d'achat
+                            if self.should_buy(data):
+                                print("  -> Signal ACHAT détecté!")
+                                self.buy()
                         else:
                             # Vérifier si la position est encore valide
                             if eth_balance < MIN_POSITION_THRESHOLD:
-                                # Position devenue dust - vendre et repartir à zéro
-                                if eth_balance > 0:
-                                    print(f"  -> Position dust: {eth_balance:.6f} ETH - vente automatique")
-                                    self.sell_dust(eth_balance)
+                                # Position devenue dust - ignorer et repartir à zéro
+                                print(f"  -> Dust ignoré: {eth_balance:.6f} ETH - Position réinitialisée")
                                 self.position = None
+                                # Essayer d'acheter après avoir ignoré le dust
+                                if self.should_buy(data):
+                                    print("  -> Signal ACHAT détecté (après dust)!")
+                                    self.buy()
                             else:
                                 # Position valide - vérifier vente
                                 if self.should_sell(data):
