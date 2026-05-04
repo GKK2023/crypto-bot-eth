@@ -1,5 +1,5 @@
-ccxt
-pandas
-numpy
-python-dotenv
-requests
+ccxt,
+pandas,
+python-dotenv,
+requests,
+gate-api
