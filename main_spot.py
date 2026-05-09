@@ -1,6 +1,7 @@
 """
 CryptoBot - Spot Trading Bot ETH/USDT
 Version avec serveur web minimal - 3 minutes
+RSI achete: 40 (pour crypto stable)
 """
 import os
 import sys
@@ -35,10 +36,10 @@ MIN_PROFIT_THRESHOLD = 0.5
 # Take-Profit automatique
 TAKE_PROFIT_THRESHOLD = 2.0
 
-# Seuil RSI pour achat
-RSI_BUY_THRESHOLD = 30
+# Seuil RSI pour achat - 40 POUR ETH STABLE
+RSI_BUY_THRESHOLD = 40
 
-# Seuil minimum pour une vraie position (ETH est moins cher)
+# Seuil minimum pour une vraie position
 MIN_POSITION_THRESHOLD = 0.001
 
 
@@ -342,6 +343,7 @@ class SimpleBot:
     def run(self):
         print(f"\n===== BOT ETH/USDT - 3 MINUTES =====")
         print(f"Paire: {SYMBOL}")
+        print(f"RSI achat: {RSI_BUY_THRESHOLD}")
         print(f"====================================\n")
 
         while True:
@@ -375,7 +377,6 @@ class SimpleBot:
                         macd, signal = self.calculate_macd(data)
                         print(f" RSI: {rsi:.1f} | MACD: {macd:.2f}")
 
-                # 3 minutes
                 time.sleep(180)
             except KeyboardInterrupt:
                 print("\nBot arrete!")
