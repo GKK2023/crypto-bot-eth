@@ -2,4 +2,3 @@ ccxt
 pandas
 python-dotenv
 requests
-gate-api
