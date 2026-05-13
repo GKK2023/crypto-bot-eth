@@ -2,6 +2,7 @@
 CryptoBot - Spot Trading Bot ETH/USDT
 Version avec serveur web minimal - 3 minutes
 RSI achete: 40 (pour crypto stable)
+Allocation: 40%
 """
 import os
 import sys
@@ -27,8 +28,8 @@ TOTAL_FEES = 0.002
 # Solde minimum à garder en USDT
 MIN_USDT_RESERVE = 5
 
-# Pourcentage du solde à utiliser
-MAX_USDT_PERCENT = 20
+# Pourcentage du solde à utiliser - 40% pour ETH stable
+MAX_USDT_PERCENT = 40
 
 # Seuil de profit minimum NET
 MIN_PROFIT_THRESHOLD = 0.5
@@ -39,8 +40,8 @@ TAKE_PROFIT_THRESHOLD = 2.0
 # Seuil RSI pour achat - 40 POUR ETH STABLE
 RSI_BUY_THRESHOLD = 40
 
-# Seuil minimum pour une vraie position
-MIN_POSITION_THRESHOLD = 0.001
+# Seuil minimum pour une vraie position - réduit pour éviter le bug
+MIN_POSITION_THRESHOLD = 0.0001
 
 
 class SimpleHandler(BaseHTTPRequestHandler):
@@ -262,19 +263,15 @@ class SimpleBot:
             current_price = self.get_price()
             if current_price is None:
                 return False
-
             is_profitable, profit_pct, details = self.calculate_profitability(current_price)
-
             if profit_pct >= MIN_PROFIT_THRESHOLD and profit_pct > 0:
                 print(f" -> Vente RENTABLE: {profit_pct:.2f}% (+{details.get('profit_usdt', 0):.2f}$)")
                 return True
-
             if not is_profitable:
                 target = details.get('target_price', 0)
                 print(f" -> En attente: Profit: {profit_pct:.2f}% | Cible: {target:.2f}$")
             else:
                 print(f" -> En attente: Profit: {profit_pct:.2f}% | Min: {MIN_PROFIT_THRESHOLD}%")
-
             return False
         except Exception as e:
             print(f"Erreur sell: {e}")
@@ -284,18 +281,14 @@ class SimpleBot:
         try:
             if not PAPER_MODE:
                 self.balance = self.get_real_balance()
-
             price = self.get_price()
             if price is None:
                 return
-
             total_usdt = float(self.balance.get('USDT', 0))
             usdt_to_use = (total_usdt - MIN_USDT_RESERVE) * (MAX_USDT_PERCENT / 100)
-
             if usdt_to_use > 5:
                 amount_before_fee = usdt_to_use / price
                 amount_after_fee = amount_before_fee * (1 - TRADING_FEE)
-
                 if amount_after_fee * price >= 7:
                     amount = round(amount_after_fee, 4)
                     if PAPER_MODE:
@@ -314,18 +307,15 @@ class SimpleBot:
         try:
             if not PAPER_MODE:
                 self.balance = self.get_real_balance()
-
             eth_balance = float(self.balance.get('ETH', 0))
             if eth_balance >= MIN_POSITION_THRESHOLD:
                 price = self.get_price()
                 if price is None:
                     return
-
                 is_profitable, profit_pct, details = self.calculate_profitability(price)
                 if not is_profitable:
                     print(f" -> Vente ANNULEE: Non rentable")
                     return
-
                 amount = eth_balance
                 if amount * price >= 7:
                     if PAPER_MODE:
@@ -344,22 +334,19 @@ class SimpleBot:
         print(f"\n===== BOT ETH/USDT - 3 MINUTES =====")
         print(f"Paire: {SYMBOL}")
         print(f"RSI achat: {RSI_BUY_THRESHOLD}")
+        print(f"Allocation: {MAX_USDT_PERCENT}%")
         print(f"====================================\n")
-
         while True:
             try:
                 if not PAPER_MODE:
                     self.balance = self.get_real_balance()
-
                 data = self.get_data()
                 if data is not None:
                     price = self.get_price()
                     if price is not None:
                         print(f"\n{datetime.now().strftime('%H:%M:%S')} | Prix: ${price:,.2f}")
                         print(f" USDT: {float(self.balance.get('USDT', 0)):.2f} | ETH: {float(self.balance.get('ETH', 0)):.4f}")
-
                         eth_balance = float(self.balance.get('ETH', 0))
-
                         if self.position is None:
                             if self.should_buy(data):
                                 print(" -> Signal ACHAT!")
@@ -372,11 +359,9 @@ class SimpleBot:
                                 if self.should_sell(data):
                                     print(" -> Signal VENTE!")
                                     self.sell()
-
                         rsi = self.calculate_rsi(data)
                         macd, signal = self.calculate_macd(data)
                         print(f" RSI: {rsi:.1f} | MACD: {macd:.2f}")
-
                 time.sleep(180)
             except KeyboardInterrupt:
                 print("\nBot arrete!")
