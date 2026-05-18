@@ -1,8 +1,6 @@
 """
 CryptoBot - Spot Trading Bot ETH/USDT
-Version avec serveur web minimal - 3 minutes
-RSI achete: 40 (pour crypto stable)
-Allocation: 40%
+Version corrigée - Meilleure détection du prix d'achat
 """
 import os
 import sys
@@ -28,7 +26,7 @@ TOTAL_FEES = 0.002
 # Solde minimum à garder en USDT
 MIN_USDT_RESERVE = 5
 
-# Pourcentage du solde à utiliser - 40% pour ETH stable
+# Pourcentage du solde à utiliser
 MAX_USDT_PERCENT = 40
 
 # Seuil de profit minimum NET
@@ -37,10 +35,10 @@ MIN_PROFIT_THRESHOLD = 0.5
 # Take-Profit automatique
 TAKE_PROFIT_THRESHOLD = 2.0
 
-# Seuil RSI pour achat - 40 POUR ETH STABLE
+# Seuil RSI pour achat
 RSI_BUY_THRESHOLD = 40
 
-# Seuil minimum pour une vraie position - réduit pour éviter le bug
+# Seuil minimum pour une vraie position
 MIN_POSITION_THRESHOLD = 0.0001
 
 
@@ -87,9 +85,10 @@ class SimpleBot:
 
         eth_balance = float(self.balance.get('ETH', 0))
         if eth_balance >= MIN_POSITION_THRESHOLD:
-            entry_price = self.get_entry_price_from_orders()
+            # CORRECTION: Chercher le prix d'achat dans l'historique des trades
+            entry_price = self.get_entry_price_from_trades()
             if not entry_price:
-                entry_price = self.get_entry_price_from_trades()
+                entry_price = self.get_entry_price_from_orders()
             if entry_price:
                 self.position = {'side': 'long', 'entry': entry_price, 'amount': eth_balance}
                 print(f"Position ETH: {eth_balance} @ ${entry_price:.4f}")
@@ -106,14 +105,14 @@ class SimpleBot:
 
     def get_entry_price_from_orders(self):
         try:
-            orders = self.exchange.fetch_closed_orders(SYMBOL, limit=10)
+            orders = self.exchange.fetch_closed_orders(SYMBOL, limit=20)
             buy_orders = [o for o in orders if o['side'] == 'buy' and o['status'] == 'closed']
             if buy_orders:
-                last_buy = buy_orders[0]
-                price = last_buy.get('average') or last_buy.get('price')
-                if price:
-                    print(f"[DEBUG] Prix trouve: ${float(price):.4f}")
-                    return float(price)
+                for order in buy_orders:
+                    price = order.get('average') or order.get('price')
+                    if price and float(price) > 0:
+                        print(f"[DEBUG] Prix achat (orders): ${float(price):.4f}")
+                        return float(price)
             return None
         except Exception as e:
             print(f"[DEBUG] Erreur ordres: {e}")
@@ -121,18 +120,20 @@ class SimpleBot:
 
     def get_entry_price_from_trades(self):
         try:
-            trades = self.exchange.fetch_my_trades(SYMBOL, limit=20)
+            trades = self.exchange.fetch_my_trades(SYMBOL, limit=50)
             if not trades:
                 return None
+            # Prendre le premier trade d'achat (le plus ancien)
             buy_trades = [t for t in trades if t['side'] == 'buy']
             if buy_trades:
-                total_cost = 0
-                total_amount = 0
-                for t in buy_trades[:5]:
-                    total_cost += t.get('cost', 0)
-                    total_amount += t.get('amount', 0)
-                if total_amount > 0:
-                    return total_cost / total_amount
+                # Trier par timestamp pour avoir le plus ancien
+                buy_trades.sort(key=lambda x: x.get('timestamp', 0))
+                # Prendre le premier (le plus ancien)
+                first_buy = buy_trades[0]
+                price = first_buy.get('price') or first_buy.get('average')
+                if price and float(price) > 0:
+                    print(f"[DEBUG] Prix achat (trades): ${float(price):.4f}")
+                    return float(price)
             return None
         except Exception as e:
             print(f"[DEBUG] Erreur trades: {e}")
@@ -232,13 +233,19 @@ class SimpleBot:
             entry_price = float(self.position.get('entry', 0))
             amount_eth = float(self.position.get('amount', 0))
             if entry_price == 0 or amount_eth == 0:
-                return True, 0.0, {}
+                # RECUPERER LE PRIX D'ACHAT SI MANQUANT
+                print(f"[DEBUG] Prix d'achat manquant, tentative de récupération...")
+                entry_price = self.get_entry_price_from_trades()
+                if entry_price:
+                    self.position['entry'] = entry_price
+                    print(f"[DEBUG] Prix d'achat récupéré: ${entry_price:.4f}")
+                else:
+                    return True, 0.0, {}
             break_even_price = entry_price * (1 + TOTAL_FEES)
             target_price = break_even_price * (1 + MIN_PROFIT_THRESHOLD / 100)
             profit_pct = ((current_price - entry_price) / entry_price) * 100
             profit_usdt = (current_price - entry_price) * amount_eth
             is_profitable = current_price > target_price
-            take_profit_price = break_even_price * (1 + TAKE_PROFIT_THRESHOLD / 100)
             return is_profitable, float(profit_pct), {
                 'entry_price': entry_price,
                 'current_price': current_price,
@@ -269,7 +276,8 @@ class SimpleBot:
                 return True
             if not is_profitable:
                 target = details.get('target_price', 0)
-                print(f" -> En attente: Profit: {profit_pct:.2f}% | Cible: {target:.2f}$")
+                entry = details.get('entry_price', 0)
+                print(f" -> En attente: Profit: {profit_pct:.2f}% | Achat: ${entry:.2f}$ | Cible: ${target:.2f}$")
             else:
                 print(f" -> En attente: Profit: {profit_pct:.2f}% | Min: {MIN_PROFIT_THRESHOLD}%")
             return False
