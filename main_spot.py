@@ -1,5 +1,5 @@
 # CryptoBot - Spot Trading Bot ETH/USDT
-# Version avec persistance du prix d'achat
+# Version avec persistance ET variable d'environnement ENTRY_PRICE
 
 import os
 import sys
@@ -18,6 +18,9 @@ PAPER_MODE = False
 # Clés API Gate.io
 API_KEY = os.getenv('GATEIO_API_KEY', '')
 API_SECRET = os.getenv('GATEIO_API_SECRET', '')
+
+# Variable d'environnement pour prix d'achat manuel
+MANUAL_ENTRY_PRICE = os.getenv('ENTRY_PRICE')
 
 # Frais Gate.io
 TRADING_FEE = 0.001
@@ -128,31 +131,42 @@ class SimpleBot:
 
         eth_balance = float(self.balance.get('ETH', 0))
         if eth_balance >= MIN_POSITION_THRESHOLD:
-            # ETAPE 1: Essayer de charger depuis le fichier
-            entry_price, saved_amount = self.load_entry_price()
+            # ===== PRIORITE 1: Variable d'environnement ENTRY_PRICE =====
+            if MANUAL_ENTRY_PRICE:
+                try:
+                    entry_price = float(MANUAL_ENTRY_PRICE)
+                    self.position = {'side': 'long', 'entry': entry_price, 'amount': eth_balance}
+                    print(f"[IMPORTANT] Position ETH (depuis ENV): {eth_balance} @ ${entry_price:.4f}")
+                    return
+                except Exception as e:
+                    print(f"[DEBUG] Erreur lecture ENTRY_PRICE: {e}")
             
+            # ===== PRIORITE 2: Fichier sauvegarde =====
+            entry_price, saved_amount = self.load_entry_price()
             if entry_price and saved_amount > 0:
                 self.position = {'side': 'long', 'entry': entry_price, 'amount': eth_balance}
                 print(f"Position ETH (depuis fichier): {eth_balance} @ ${entry_price:.4f}")
+                return
+            
+            # ===== PRIORITE 3: Historique des trades =====
+            entry_price = self.get_entry_price_from_trades()
+            if not entry_price:
+                entry_price = self.get_entry_price_from_orders()
+            
+            if entry_price:
+                self.position = {'side': 'long', 'entry': entry_price, 'amount': eth_balance}
+                self.save_entry_price(entry_price, eth_balance)
+                print(f"Position ETH (depuis trades): {eth_balance} @ ${entry_price:.4f}")
+                return
+            
+            # ===== PRIORITE 4: Prix actuel (dernier recours) =====
+            current_price = self.get_price()
+            if current_price:
+                self.position = {'side': 'long', 'entry': current_price, 'amount': eth_balance}
+                self.save_entry_price(current_price, eth_balance)
+                print(f"[ATTENTION] Position ETH (prix actuel): {eth_balance} @ ${current_price:.4f}")
             else:
-                # ETAPE 2: Chercher dans l'historique des trades
-                entry_price = self.get_entry_price_from_trades()
-                if not entry_price:
-                    entry_price = self.get_entry_price_from_orders()
-                
-                if entry_price:
-                    self.position = {'side': 'long', 'entry': entry_price, 'amount': eth_balance}
-                    self.save_entry_price(entry_price, eth_balance)
-                    print(f"Position ETH (depuis trades): {eth_balance} @ ${entry_price:.4f}")
-                else:
-                    # ETAPE 3: Utiliser le prix actuel
-                    current_price = self.get_price()
-                    if current_price:
-                        self.position = {'side': 'long', 'entry': current_price, 'amount': eth_balance}
-                        self.save_entry_price(current_price, eth_balance)
-                        print(f"Position ETH (prix actuel): {eth_balance} @ ${current_price:.4f}")
-                    else:
-                        self.position = None
+                self.position = None
         else:
             print(f"Pas de position ETH")
             self.position = None
@@ -163,7 +177,6 @@ class SimpleBot:
             orders = self.exchange.fetch_closed_orders(SYMBOL, limit=20)
             buy_orders = [o for o in orders if o['side'] == 'buy' and o['status'] == 'closed']
             if buy_orders:
-                # Prendre le plus ancien ordre d'achat
                 buy_orders.sort(key=lambda x: x.get('timestamp', 0))
                 for order in buy_orders:
                     price = order.get('average') or order.get('price')
@@ -182,7 +195,6 @@ class SimpleBot:
             if not trades:
                 return None
             
-            # Filtrer les achats et trier par timestamp (plus ancien en premier)
             buy_trades = [t for t in trades if t['side'] == 'buy']
             if buy_trades:
                 buy_trades.sort(key=lambda x: x.get('timestamp', 0))
@@ -395,7 +407,6 @@ class SimpleBot:
                         order = self.exchange.create_order(SYMBOL, 'market', 'buy', usdt_to_use)
                         print(f"ACHAT reel: {amount:.4f} ETH @ ${price}")
                         
-                        # Recupérer le prix d'achat réel depuis l'ordre
                         filled = order.get('fills', [])
                         if filled:
                             total_cost = sum(float(f.get('cost', 0)) for f in filled)
@@ -453,6 +464,8 @@ class SimpleBot:
         print(f"Paire: {SYMBOL}")
         print(f"RSI achat: {RSI_BUY_THRESHOLD}")
         print(f"Allocation: {MAX_USDT_PERCENT}%")
+        if MANUAL_ENTRY_PRICE:
+            print(f"[CONFIG] ENTRY_PRICE defini: ${MANUAL_ENTRY_PRICE}")
         print(f"====================================\n")
         
         while True:
